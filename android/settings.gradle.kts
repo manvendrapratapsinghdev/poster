@@ -21,6 +21,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Flutter engine artifacts (io.flutter:*) are hosted here.
+        maven(url = "https://storage.googleapis.com/download.flutter.io")
     }
 }
 
@@ -28,8 +30,8 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
     id("com.google.gms.google-services") version "4.4.3" apply false
-    id("com.android.application") version "8.6.1" apply false
-    id("com.android.library") version "8.6.1" apply false
+    id("com.android.application") version "8.9.1" apply false
+    id("com.android.library") version "8.9.1" apply false
 
 }
 
