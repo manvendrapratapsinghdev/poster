@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../controllers/layer_controller.dart';
 import '../widgets/layer_widget.dart';
 import '../models/layer_model.dart';
+import '../screens/template_detail_screen.dart';
 
-class LayerStack extends StatelessWidget {
-  final LayerController controller;
+class LayerStack extends ConsumerWidget {
   final GlobalKey repaintKey;
   final Size canvasSize;
 
   const LayerStack({
     Key? key,
-    required this.controller,
     required this.repaintKey,
     required this.canvasSize,
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final controller = ref.watch(layerControllerProvider);
     return RepaintBoundary(
       key: repaintKey,
       child: Container(
@@ -49,4 +50,3 @@ class LayerStack extends StatelessWidget {
     );
   }
 }
-

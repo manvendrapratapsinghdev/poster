@@ -92,6 +92,34 @@ class LayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Update imagePath and imageSourceType for a layer by id
+  void updateLayer(String id, {String? imagePath, ImageSourceType? imageSourceType}) {
+    final idx = _layers.indexWhere((l) => l.id == id);
+    if (idx == -1) return;
+    final l = _layers[idx];
+    _layers[idx] = l.copyWith(
+      imagePath: imagePath ?? l.imagePath,
+      imageSourceType: imageSourceType ?? l.imageSourceType,
+    );
+    notifyListeners();
+  }
+
+  /// Move a layer from oldIndex to newIndex with proper adjustment
+  void moveLayer(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || newIndex < 0 || oldIndex >= _layers.length || newIndex >= _layers.length) return;
+    if (oldIndex == newIndex) return;
+
+    // Adjust newIndex if oldIndex < newIndex
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+
+    final layer = _layers.removeAt(oldIndex);
+    _layers.insert(newIndex, layer);
+    _reindex();
+    notifyListeners();
+  }
+
   void _reindex() {
     for (int i = 0; i < _layers.length; i++) {
       _layers[i] = _layers[i].copyWith(zIndex: i);
@@ -104,4 +132,3 @@ class LayerController extends ChangeNotifier {
     notifyListeners();
   }
 }
-

@@ -31,40 +31,119 @@ final templateProvider = FutureProvider.family<Map<String, dynamic>, String>(
 
 final faceImageProvider = StateProvider<File?>((ref) => null);
 final editedTemplateProvider = StateProvider<File?>((ref) => null);
+final layerControllerProvider = ChangeNotifierProvider.autoDispose<LayerController>((ref) {
+  return LayerController();
+});
 
-class TemplateDetailScreen extends ConsumerWidget {
+class TemplateDetailScreen extends ConsumerStatefulWidget {
   static const routeName = '/template-detail';
   final String templateId;
+  final String? backgroundImageUrl;
+  final String? stripImageUrl;
 
-  const TemplateDetailScreen({super.key, required this.templateId});
+  const TemplateDetailScreen({
+    Key? key,
+    required this.templateId,
+    this.backgroundImageUrl,
+    this.stripImageUrl,
+  }) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final templateAsync = ref.watch(templateProvider(templateId));
-    final faceImage = ref.watch(faceImageProvider);
-    final editedImage = ref.watch(editedTemplateProvider);
+  ConsumerState<TemplateDetailScreen> createState() => _TemplateDetailScreenState();
+}
 
-    // --- LayerController integration ---
-    final layerController = LayerController();
-    final repaintKey = GlobalKey();
-    final canvasSize = const Size(320, 320); // You can adjust as needed
+class _TemplateDetailScreenState extends ConsumerState<TemplateDetailScreen> {
+  final repaintKey = GlobalKey();
+  final canvasSize = const Size(320, 320);
+  bool _layersInitialized = false;
 
-    // --- Helper to update or add background layer ---
-    void setBackgroundLayer(String imagePath, ImageSourceType sourceType) {
-      final bgIdx = layerController.layers.indexWhere((l) => l.type == LayerType.background);
-      if (bgIdx != -1) {
-        final old = layerController.layers[bgIdx];
-        layerController.removeLayer(old.id);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_layersInitialized) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initLayers();
+      });
+      _layersInitialized = true;
+    }
+  }
+
+  void _initLayers() {
+    final layerController = ref.read(layerControllerProvider);
+    // Add background layer if provided
+    if (widget.backgroundImageUrl != null && widget.backgroundImageUrl!.isNotEmpty) {
+      final bgExists = layerController.layers.any((l) => l.type == LayerType.background);
+      if (!bgExists) {
+        layerController.addLayer(LayerModel(
+          id: UniqueKey().toString(),
+          name: 'Background',
+          type: LayerType.background,
+          imageSourceType: ImageSourceType.network,
+          imagePath: widget.backgroundImageUrl!,
+          zIndex: 0,
+        ));
       }
+    }
+    // Add strip/template overlay layer if provided
+    if (widget.stripImageUrl != null && widget.stripImageUrl!.isNotEmpty) {
+      final stripExists = layerController.layers.any((l) => l.type == LayerType.template);
+      if (!stripExists) {
+        layerController.addLayer(LayerModel(
+          id: UniqueKey().toString(),
+          name: 'Template Strip',
+          type: LayerType.template,
+          imageSourceType: ImageSourceType.network,
+          imagePath: widget.stripImageUrl!,
+          zIndex: 1,
+        ));
+      }
+    }
+    // If neither provided, fallback to API template
+    if ((widget.backgroundImageUrl == null || widget.backgroundImageUrl!.isEmpty) &&
+        (widget.stripImageUrl == null || widget.stripImageUrl!.isEmpty)) {
+      final templateAsync = ref.read(templateProvider(widget.templateId));
+      templateAsync.whenData((template) {
+        final filePath = template['file_path'] ?? '';
+        if (filePath.isNotEmpty) {
+          layerController.addLayer(LayerModel(
+            id: UniqueKey().toString(),
+            name: 'Template',
+            type: LayerType.template,
+            imageSourceType: ImageSourceType.network,
+            imagePath: filePath,
+            zIndex: 0,
+          ));
+        }
+      });
+    }
+  }
+
+  // Helper to set background layer from horizontal template strip
+  void setBackgroundLayer(String imageUrl, ImageSourceType sourceType) {
+    final layerController = ref.read(layerControllerProvider);
+    final bgIndex = layerController.layers.indexWhere((l) => l.type == LayerType.background);
+    if (bgIndex != -1) {
+      final bgLayer = layerController.layers[bgIndex];
+      layerController.updateLayer(bgLayer.id, imagePath: imageUrl, imageSourceType: sourceType);
+    } else {
       layerController.addLayer(LayerModel(
         id: UniqueKey().toString(),
         name: 'Background',
         type: LayerType.background,
         imageSourceType: sourceType,
-        imagePath: imagePath,
+        imagePath: imageUrl,
         zIndex: 0,
       ));
     }
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final templateAsync = ref.watch(templateProvider(widget.templateId));
+    final layerController = ref.watch(layerControllerProvider);
+    final faceImage = ref.watch(faceImageProvider);
+    final editedImage = ref.watch(editedTemplateProvider);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -89,7 +168,7 @@ class TemplateDetailScreen extends ConsumerWidget {
                   Text(err.toString()),
                   const SizedBox(height: 8),
                   ElevatedButton(
-                    onPressed: () => ref.refresh(templateProvider(templateId)),
+                    onPressed: () => ref.refresh(templateProvider(widget.templateId)),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -108,7 +187,6 @@ class TemplateDetailScreen extends ConsumerWidget {
                     // --- LayerStack replaces main image area ---
                     Center(
                       child: LayerStack(
-                        controller: layerController,
                         repaintKey: repaintKey,
                         canvasSize: canvasSize,
                       ),
@@ -166,7 +244,17 @@ class TemplateDetailScreen extends ConsumerWidget {
                               final t = templates[idx];
                               final thumbUrl = t['file_path'] ?? '';
                               return GestureDetector(
-                                onTap: () => setBackgroundLayer(thumbUrl, ImageSourceType.network),
+                                onTap: () {
+                                  // Add as a new template strip layer, not background
+                                  ref.read(layerControllerProvider.notifier).addLayer(LayerModel(
+                                    id: UniqueKey().toString(),
+                                    name: 'Template Strip',
+                                    type: LayerType.template,
+                                    imageSourceType: ImageSourceType.network,
+                                    imagePath: thumbUrl,
+                                    zIndex: ref.read(layerControllerProvider).layers.length,
+                                  ));
+                                },
                                 child: Container(
                                   width: 100,
                                   height: 120,
@@ -208,19 +296,19 @@ class TemplateDetailScreen extends ConsumerWidget {
             child: const Icon(Icons.layers),
             label: 'Add Template Layer',
             onTap: () {
-              final template = ref.read(templateProvider(templateId)).maybeWhen(
+              final template = ref.read(templateProvider(widget.templateId)).maybeWhen(
                 data: (t) => t,
                 orElse: () => null,
               );
               if (template == null) return;
               final imageUrl = template['file_path'] ?? '';
-              layerController.addLayer(LayerModel(
+              ref.read(layerControllerProvider.notifier).addLayer(LayerModel(
                 id: UniqueKey().toString(),
                 name: 'Template',
                 type: LayerType.template,
                 imageSourceType: ImageSourceType.network,
                 imagePath: imageUrl,
-                zIndex: layerController.layers.length,
+                zIndex: ref.read(layerControllerProvider).layers.length,
               ));
             },
           ),
@@ -231,13 +319,31 @@ class TemplateDetailScreen extends ConsumerWidget {
               final picker = ImagePicker();
               final picked = await picker.pickImage(source: ImageSource.gallery);
               if (picked != null) {
-                layerController.addLayer(LayerModel(
+                ref.read(layerControllerProvider.notifier).addLayer(LayerModel(
                   id: UniqueKey().toString(),
                   name: 'Face',
                   type: LayerType.face,
                   imageSourceType: ImageSourceType.file,
                   imagePath: picked.path,
-                  zIndex: layerController.layers.length,
+                  zIndex: ref.read(layerControllerProvider).layers.length,
+                ));
+              }
+            },
+          ),
+          SpeedDialChild(
+            child: const Icon(Icons.verified),
+            label: 'Add Logo Layer',
+            onTap: () async {
+              final picker = ImagePicker();
+              final picked = await picker.pickImage(source: ImageSource.gallery);
+              if (picked != null) {
+                ref.read(layerControllerProvider.notifier).addLayer(LayerModel(
+                  id: UniqueKey().toString(),
+                  name: 'Logo',
+                  type: LayerType.logo, // Ensure LayerType.logo exists in your enum
+                  imageSourceType: ImageSourceType.file,
+                  imagePath: picked.path,
+                  zIndex: ref.read(layerControllerProvider).layers.length,
                 ));
               }
             },

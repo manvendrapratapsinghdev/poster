@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/template_provider.dart';
-import '../template_detail_screen.dart';
+import '../poster_screen.dart';
 import '../../widgets/gradient_background.dart';
 import '../widgets/image_overlay_card.dart';
 
@@ -76,8 +76,11 @@ class TemplateListScreen extends ConsumerWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => TemplateDetailScreen(
+                                builder: (_) => PosterScreen(
                                   templateId: template['_id'].toString(),
+                                  initialBackgroundUrl: template['thumbnail_url'] ?? '',
+                                  // pass templates for selection in poster screen in backgrounds
+                                  backgrounds: templates.map((t) => t['thumbnail_url'] as String).toList(),
                                 ),
                               ),
                             );
@@ -103,7 +106,7 @@ class TemplateListScreen extends ConsumerWidget {
 
                   // -------- Horizontal Template Strip --------
                   SizedBox(
-                    height: 120,
+                    height: 30,
                     child: Consumer(
                       builder: (context, ref, _) {
                         final stripsAsync = ref.watch(templateStripsProvider);
